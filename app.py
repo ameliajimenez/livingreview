@@ -1,86 +1,73 @@
 import streamlit as st
+from st_link_analysis import st_link_analysis, NodeStyle, EdgeStyle
 import pandas as pd
-import matplotlib.pyplot as plt
-from annotated_text import annotated_text
-import re
+import numpy as np
 
+## To cytoscape json
+#elements = df.apply(lambda x: {"data": dict(x)}, axis=1).tolist()
 
-# Function to separate the numbers and alphabets from the given string
-# from paper key to paper name
-def convert_key_to_paper_name(str):
-    numbers = re.findall(r'[0-9]+', str)
-    numbers = ''.join(numbers)
-    alphabets = re.findall(r'[a-zA-Z]+', str)
-    alphabets = ''.join(alphabets)  # convert list to string
-    paper_name = alphabets[0].upper() + alphabets[1:] + ' et al. ' + numbers
-    return paper_name
+## Back to pandas
+#df = pd.json_normalize(elements).rename(columns=lambda x: x.split("."
 
+st.title('Living Review - Graph')
+# st.markdown(':warning: :construction: in progress :warning: :construction:')
 
-st.set_page_config(layout="wide")
-
-col4, col5 = st.columns(2)
-
-with col4:
-    # Add a title and intro text
-    st.title('Dataset Explorer :dizzy:')
-    st.text('This is a web app to allow exploration of medical imaging datasets')
-
-    st.image("overview.png", width=600)
-
+# connect to sql database
 conn = st.connection("postgresql", "sql")
 
+# Perform query
+df_papers = conn.query('select papers.id, papers.name, papers.arxiv from papers')
+#df_papers['paper_name'] = df_papers['name'].apply(convert_key_to_paper_name)
+df_papers['label'] = 'PAPER'
+df_papers['attribute'] = df_papers['arxiv']
+df_papers = df_papers.drop(columns=['arxiv'], axis=1)
+df_papers['id'] = df_papers['id'].map(lambda x: "p"+str(x))
 
+df_datasets = conn.query('select datasets.id, datasets.name, datasets.modality from datasets')
+df_datasets['label'] = 'DATASET'
+df_datasets['attribute'] = df_datasets['modality']
+df_datasets = df_datasets.drop(columns=['modality'])
+df_datasets['id'] = df_datasets['id'].map(lambda x: "d"+str(x))
 
+df_nodes = pd.concat([df_datasets, df_papers])
+the_nodes = df_nodes.apply(lambda x: {"data": dict(x)}, axis=1).tolist()
 
-# Perform query.
-df_datasets = conn.query('SELECT * FROM datasets', ttl="10m")
+# load data with links
+df_dataset_usages = conn.query('select dataset_usages.paper_id, dataset_usages.dataset_id, dataset_usages.id,'
+                               'dataset_usages.shortcuts, dataset_usages.labels from dataset_usages')
+# rename indices
+df_dataset_usages['id'] = np.arange(0, len(df_dataset_usages), 1)
+df_dataset_usages['id'] = df_dataset_usages['id'].map(lambda x: "e"+str(x))
+df_dataset_usages['source'] = df_dataset_usages['paper_id'].map(lambda x: "p"+str(x))
+df_dataset_usages['target'] = df_dataset_usages['dataset_id'].map(lambda x: "d"+str(x))
+# get indices for shortcuts or labels
+labels_index = df_dataset_usages.index[df_dataset_usages['labels'].notna()].tolist()
+shortcuts_index = df_dataset_usages.index[df_dataset_usages['shortcuts'].notna()].tolist()
+# combine information into attribute field
+df_dataset_usages['attribute'] = [df_dataset_usages['shortcuts'][i] if i in shortcuts_index else df_dataset_usages['labels'][i] for i in range(len(df_dataset_usages))]
+# assign posted or follows for labels or shortcuts respectively
+df_dataset_usages['label'] = ['SHORTCUT' if i in shortcuts_index else '+LABEL' for i in range(len(df_dataset_usages))]
+df_dataset_usages = df_dataset_usages.drop(columns=['dataset_id'], axis=1)
+df_dataset_usages = df_dataset_usages.drop(columns=['paper_id'], axis=1)
+df_dataset_usages = df_dataset_usages.drop(columns=['shortcuts'], axis=1)
+df_dataset_usages = df_dataset_usages.drop(columns=['labels'], axis=1)
 
-with col5:
-    st.text("")
-    st.text("")
-    st.text("")
-    st.text("")
-    st.text("")
-    selected_modality = st.selectbox('Select modality', options=df_datasets.modality.unique())
-    df_datasets_filtered = df_datasets.loc[df_datasets['modality'] == selected_modality]
-    st.text("")
-    selected_dataset = st.selectbox('Select dataset', options=df_datasets_filtered.name)
-    #selected_dataset = st.selectbox('Select dataset', options=df_datasets.name)
+the_edges = df_dataset_usages.apply(lambda x: {"data": dict(x)}, axis=1).tolist()
 
-#df_data = conn.query('SELECT * FROM datasets where name = :thename', ttl="10m", params={"thename": selected_dataset})
+node_styles = [
+    NodeStyle(label='DATASET', color='#FF7F3E', caption='name', icon='home'),  # DATASETS // PERSON
+    NodeStyle(label="PAPER", color="#2A629A", caption="name", icon="description")  # PAPERS  // POST
+]
 
-df = conn.query('select papers.name, papers.arxiv, dataset_usages.shortcuts, dataset_usages.labels from papers '
-                'left join dataset_usages on papers.id = dataset_usages.paper_id '
-                'left join datasets on datasets.id = dataset_usages.dataset_id '
-                'where datasets.name ilike :thename', params={"thename": selected_dataset})
+edge_styles = [
+    EdgeStyle("+LABEL", caption='label', directed=True),
+    EdgeStyle("SHORTCUT", caption='label', directed=True),
+    #EdgeStyle("QUOTES", caption='label', directed=True),
+]
 
-df['paper_name'] = df['name'].apply(convert_key_to_paper_name)
-df_shortcuts = df[['name', 'paper_name', 'arxiv', 'shortcuts']].dropna()
-df_labels = df[['name', 'paper_name', 'arxiv', 'labels']].dropna()
+layout = {"name": "fcose", "animate": "end", "nodeDimensionsIncludeLabels": False}
 
-st.header("Exploring...")
-st.subheader(selected_dataset + " dataset")
-#st.header(selected_dataset)
-if not df.empty:
-    #annotated_text("Jiménez-Sánchez et al. 2023 [link](https://arxiv.org/abs/2402.06353) ", ("chest drains", "shortcuts"))
-    #df_shortcuts.apply(lambda x: st.markdown("check out this [link](%s)" % x.arxiv), axis=1)
-    df_shortcuts.apply(lambda x: annotated_text(x.paper_name, ' [ref](%s) ' % x.arxiv, (x.shortcuts, 'shortcuts', "#faa")), axis=1)
-    df_labels.apply(lambda x: annotated_text(x.paper_name, ' [ref](%s) ' % x.arxiv, (x.labels, 'labels', '#9cf')), axis=1)
+elements = {"nodes": the_nodes, "edges": the_edges}
 
-col1, col2, col3 = st.columns(3)
+st_link_analysis(elements, layout, node_styles, edge_styles, key="xyz")
 
-with col1:
-   st.header("Shortcuts")
-   st.image("shortcuts.png")
-   df_shortcuts.apply(
-       lambda x: annotated_text(x.paper_name, ' [ref](%s) ' % x.arxiv, (x.shortcuts, '', "#faa")), axis=1)
-   #st.dataframe(df_shortcuts.set_index(df_shortcuts.columns[0]))
-
-with col2:
-   st.header("Additional labels")
-   st.image("labels.png")
-   df_labels.apply(lambda x: annotated_text(x.paper_name, ' [ref](%s) ' % x.arxiv, (x.labels, '', '#9cf')), axis=1)
-
-with col3:
-   st.header("Additional resources")
-   st.image("embedding.png")
