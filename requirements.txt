@@ -1,5 +1,5 @@
-streamlit~=1.31.1
-pandas~=1.5.0
-matplotlib~=3.5.1
-numpy~=1.23.3
-st-link-analysis~=0.3.0
+streamlit==1.31.1
+pandas==1.5.0
+matplotlib==3.5.1
+numpy==1.23.3
+st-link-analysis==0.3.0
