@@ -4,3 +4,5 @@ matplotlib==3.5.1
 numpy>1.23.3
 setuptools==60.2.0
 st-link-analysis==0.3.0
+st-annotated-text==4.0.1
+sqlalchemy==2.0.27
