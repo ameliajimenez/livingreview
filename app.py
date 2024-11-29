@@ -55,13 +55,13 @@ df_dataset_usages = df_dataset_usages.drop(columns=['labels'], axis=1)
 the_edges = df_dataset_usages.apply(lambda x: {"data": dict(x)}, axis=1).tolist()
 
 node_styles = [
-    NodeStyle(label='DATASET', color='#FF7F3E', caption='name', icon='home'),  # DATASETS // PERSON
+    NodeStyle(label='DATASET', color='#FF7F3E', caption='name', icon='inventory'),  # DATASETS // PERSON
     NodeStyle(label="PAPER", color="#2A629A", caption="name", icon="description")  # PAPERS  // POST
 ]
 
 edge_styles = [
-    EdgeStyle("+LABEL", caption='label', directed=True),
-    EdgeStyle("SHORTCUT", caption='label', directed=True),
+    EdgeStyle("+LABEL", color='#e8c2a7', caption='label', directed=True),
+    EdgeStyle("SHORTCUT", color='#dcc7e4', caption='label', directed=True),
     #EdgeStyle("QUOTES", caption='label', directed=True),
 ]
 
